@@ -1,0 +1,12 @@
+{
+  "name": "Fig2C4D",
+  "id": "fig2c4d",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": ["figma"],
+  "networkAccess": {
+    "allowedDomains": ["http://localhost:8787"],
+    "reasoning": "Envia os vetores convertidos para o receptor do Cinema 4D rodando localmente."
+  }
+}

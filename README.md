@@ -1,0 +1,172 @@
+# Fig2C4D
+
+Send Figma vectors straight into Cinema 4D with one click — no exporting, saving
+or importing files.
+
+Figma's normal SVG export turns border radius into `<rect rx>` or elliptical arcs
+(`A`), and that is exactly where Cinema 4D's importer breaks. Fig2C4D reads the
+geometry Figma has already resolved and sends nothing but cubic Bézier curves
+(`M/L/C/Z`), in absolute coordinates and with no `transform`. What lands in C4D
+are clean splines.
+
+Two plugins talking over HTTP on `localhost`:
+
+```
+Figma/                    Figma plugin: converts the selection and sends it
+C4D-Plugin/Fig2C4D/       Cinema 4D plugin: receives it and builds the splines
+```
+
+---
+
+## Requirements
+
+- **Cinema 4D** — tested on **Cinema 4D 2026**. Earlier versions should work (the
+  code looks each parameter up by name and falls back when one is missing), but
+  they have not been tested.
+- **Figma** — desktop app, in plugin development mode.
+
+---
+
+## Installation
+
+### 1. Cinema 4D
+
+Copy the **whole** `C4D-Plugin/Fig2C4D` folder into C4D's plugins folder.
+
+**macOS**
+
+```bash
+for d in ~/Library/Preferences/Maxon/*/plugins; do mkdir -p "$d/Fig2C4D" && cp C4D-Plugin/Fig2C4D/* "$d/Fig2C4D/"; done
+```
+
+**Windows** — copy `C4D-Plugin\Fig2C4D` into:
+
+```
+%APPDATA%\Maxon\<your C4D version>\plugins\
+```
+
+You should end up with:
+
+```
+plugins/
+└── Fig2C4D/
+    ├── fig2c4d.pyp
+    └── fig2c4d_core.py
+```
+
+**Restart Cinema 4D.** Open the console (`Extensions → Console`, or `Shift+F10`)
+and look for:
+
+```
+Fig2C4D: listening on http://localhost:8787
+```
+
+If it isn't there, the two files are most likely not in the same folder.
+
+### 2. Figma
+
+1. Open the Figma desktop app
+2. Menu → `Plugins` → `Development` → `Import plugin from manifest…`
+3. Pick `Figma/manifest.json`
+
+The plugin shows up under `Plugins → Development → Fig2C4D`.
+
+---
+
+## Usage
+
+1. Keep Cinema 4D open, with a document.
+2. In Figma, select what you want to send — a single shape, a group, a whole
+   frame, or several items at once.
+3. Run the plugin and hit **Send to C4D**.
+
+The splines show up in C4D inside a null named `Fig2C4D - 3 items`, centred on the
+origin, with undo working. The panel's footer shows the connection state.
+
+**With Cinema 4D closed**, the button still works: the plugin saves the converted
+`.svg` instead — same geometry, ready to import by hand later.
+
+### Options
+
+| Option | What it does |
+|---|---|
+| **Primitives** | Shapes with a C4D equivalent arrive as editable parametric objects instead of point splines. |
+| **Extrude fills** | Every node that has a fill goes inside an Extrude with Direction Z and Offset 0.1. |
+
+The text field suggests the selected layer's name and doubles as an override for
+the group name in C4D. Enter sends too.
+
+---
+
+## What carries over
+
+**Name and colour** — the object is born with the Figma layer's name, with
+`Basic → Use Color` enabled and `Display Color` set from the fill (the stroke
+stands in when there is no fill). `Icon Color` is set to *Display Color* as well,
+so the Object Manager icon is tinted too.
+
+**Parametric shapes** (with **Primitives** on):
+
+| Figma | Cinema 4D | Falls back to Bézier when |
+|---|---|---|
+| Rectangle | Rectangle spline (Rounding + Radius) | corners differ from each other, or corner smoothing is on |
+| Ellipse | Circle spline (Radius) | not round, or it's an arc/donut |
+| Star | Star spline (Points, Inner/Outer Radius) | — |
+| Polygon | n-Side spline (Sides, Radius, Rounding) | corner smoothing is on |
+
+Any node with scale or skew in its matrix also falls back to Bézier. The
+primitive's descriptor travels in `data-*` attributes **alongside the exact
+path**, so if your C4D version doesn't expose one of the parameters, the shape
+falls back to Bézier rather than arriving deformed — and the console says which
+parameter was missing.
+
+### Two honest caveats
+
+**Rectangle corners.** Cinema 4D's fillet uses handles of `0.415 × radius`, while
+Figma draws a true circular arc (`0.5523 × radius`). The corner ends up about
+7.8% of the radius off. Compensating the radius doesn't fix it — it just pushes
+the error somewhere else. When the silhouette has to match exactly, turn
+**Primitives** off and that node comes through as Bézier, identical to Figma.
+
+**Stretched stars and polygons.** Figma stretches those shapes to fill their
+bounding box, but C4D's Star and n-Side have a single radius. The object arrives
+regular, its radius the geometric mean of the width and height readings, and with
+scale 1 on all three axes.
+
+---
+
+## Development
+
+`fig2c4d_core.py` (parser + spline building) is reloaded on every send. Edit it,
+copy it over, and the next click in Figma already uses the new version — **no
+Cinema 4D restart**:
+
+```bash
+cp C4D-Plugin/Fig2C4D/fig2c4d_core.py ~/Library/Preferences/Maxon/*/plugins/Fig2C4D/
+```
+
+If the file has a syntax error, C4D keeps the previous version and prints the
+traceback to the console — the plugin doesn't die mid-session.
+
+`fig2c4d.pyp` is the exception: it holds the socket, so changing it does require a
+restart. That's why it contains nothing but the server.
+
+If a shape arrives rotated, the `SPIN` dictionary at the top of
+`fig2c4d_core.py` adjusts each primitive's orientation, in degrees.
+
+### Tests
+
+```bash
+node Figma/test.js && python3 C4D-Plugin/Fig2C4D/fig2c4d_core.py
+```
+
+The first covers path conversion, the primitive detectors and colours; the second
+covers the SVG parser and the tangents. Neither needs Figma or C4D running.
+
+---
+
+## Security
+
+The server listens on `127.0.0.1:8787` only — it is never exposed to the network.
+The Figma plugin declares that address under `networkAccess` in its manifest and
+reaches nothing else.

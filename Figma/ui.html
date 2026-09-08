@@ -1,0 +1,115 @@
+<style>
+  body { margin: 0; padding: 16px; font: 11px/1.45 Inter, -apple-system, sans-serif;
+         color: var(--figma-color-text); background: var(--figma-color-bg); }
+  p  { margin: 0 0 14px; color: var(--figma-color-text-secondary); }
+  #name { width: 100%; height: 28px; margin: 0 0 8px; padding: 0 8px; box-sizing: border-box;
+          border: 1px solid var(--figma-color-border); border-radius: 5px;
+          background: var(--figma-color-bg-secondary); color: var(--figma-color-text);
+          font: inherit; }
+  #name:focus { outline: 1px solid var(--figma-color-border-selected); border-color: transparent; }
+  #name:disabled { color: var(--figma-color-text-disabled); }
+  .opts { padding: 8px 10px; margin: 0 0 10px; border-radius: 5px;
+          background: var(--figma-color-bg-secondary); }
+  .opts label { display: flex; gap: 7px; align-items: center; height: 23px; cursor: pointer; }
+  .opts input { margin: 0; }
+  .opts em { margin-left: auto; font-style: normal;
+             color: var(--figma-color-text-secondary); }
+  button { width: 100%; height: 32px; border: 0; border-radius: 5px; font-size: 11px;
+           font-weight: 600; color: var(--figma-color-text-onbrand);
+           background: var(--figma-color-bg-brand); cursor: pointer; }
+  button:disabled { background: var(--figma-color-bg-disabled);
+                    color: var(--figma-color-text-disabled); cursor: default; }
+  .foot { display: flex; justify-content: space-between; align-items: baseline;
+          margin: 8px 0 0; color: var(--figma-color-text-secondary); }
+  .foot b { color: var(--figma-color-text); font-weight: 600; }
+</style>
+
+<p>Figma → Cinema 4D in one click.</p>
+
+<input type="text" id="name" placeholder="Nothing selected" disabled>
+
+<div class="opts">
+  <label title="Rectangles, circles, stars and polygons arrive as editable C4D primitives">
+    <input type="checkbox" id="par" checked> Primitives <em>editable shapes</em>
+  </label>
+  <label title="Filled shapes go inside an Extrude (Direction Z, Offset 0.1)">
+    <input type="checkbox" id="ext"> Extrude fills <em>Z · 0.1</em>
+  </label>
+</div>
+
+<button id="send" disabled>Send to C4D</button>
+<div class="foot">
+  <span id="c4d">C4D: <b>looking…</b></span>
+  <span>v1.2</span>
+</div>
+
+<script>
+  var HOST = "http://localhost:8787/";
+  var btn = document.getElementById("send");
+  var field = document.getElementById("name");   // not "name": that clashes with window.name
+  var c4d = document.getElementById("c4d");
+  var par = document.getElementById("par");
+  var ext = document.getElementById("ext");
+  var suggested = "";
+  var hasSel = false;
+
+  function label(t) { btn.textContent = t; }
+  function idle() { btn.disabled = !hasSel; label("Send to C4D"); }
+
+  function ping() {
+    fetch(HOST, { method: "GET" })
+      .then(function (r) { return r.text(); })
+      .then(function (t) {
+        c4d.innerHTML = "C4D: <b>" + (t.indexOf("fig2c4d") === 0 ? "connected" : "unexpected reply") + "</b>";
+      })
+      .catch(function () {
+        c4d.innerHTML = "C4D: <b>offline</b> — will save the .svg";
+      });
+  }
+
+  function save(m) {
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([m.svg], { type: "image/svg+xml" }));
+    a.download = m.name;
+    a.click();
+  }
+
+  btn.onclick = function () {
+    btn.disabled = true;
+    label("Converting…");
+    var v = field.value.trim();
+    parent.postMessage({ pluginMessage: {
+      type: "send", param: par.checked, extrude: ext.checked,
+      name: v, auto: v === suggested
+    } }, "*");
+  };
+
+  field.onkeydown = function (e) { if (e.key === "Enter" && !btn.disabled) btn.onclick(); };
+
+  onmessage = function (e) {
+    var m = e.data.pluginMessage;
+    if (m.type === "opt") {
+      par.checked = m.param;
+      ext.checked = m.extrude;
+    } else if (m.type === "sel") {
+      hasSel = !!m.n;
+      field.disabled = !hasSel;
+      suggested = hasSel ? (m.name || m.n + " item" + (m.n > 1 ? "s" : "")) : "";
+      field.value = suggested;
+      idle();
+    } else if (m.type === "file") {
+      var done = function (txt) { idle(); label(txt); setTimeout(idle, 2500); };
+      var n = m.count + " spline" + (m.count > 1 ? "s" : "");
+      fetch(HOST, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: m.svg
+      })
+        .then(function () { done("✓ " + n + " in C4D"); })
+        .catch(function () { save(m); ping(); done("C4D offline — .svg saved"); });
+    }
+  };
+
+  ping();
+  setInterval(ping, 4000);
+</script>
