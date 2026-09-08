@@ -1,5 +1,8 @@
 # Fig2C4D
 
+![version](https://img.shields.io/badge/version-1.2-blue)
+![Cinema 4D](https://img.shields.io/badge/Cinema%204D-2026-orange)
+
 Send Figma vectors straight into Cinema 4D with one click — no exporting, saving
 or importing files.
 
@@ -31,7 +34,8 @@ C4D-Plugin/Fig2C4D/       Cinema 4D plugin: receives it and builds the splines
 
 ### 1. Cinema 4D
 
-Copy the **whole** `C4D-Plugin/Fig2C4D` folder into C4D's plugins folder.
+Copy the **`Fig2C4D` folder that lives inside `C4D-Plugin/`** into C4D's plugins
+folder — not `C4D-Plugin` itself.
 
 **macOS**
 
@@ -120,48 +124,37 @@ path**, so if your C4D version doesn't expose one of the parameters, the shape
 falls back to Bézier rather than arriving deformed — and the console says which
 parameter was missing.
 
-### Two honest caveats
+### Two caveats
 
-**Rectangle corners.** Cinema 4D's fillet uses handles of `0.415 × radius`, while
-Figma draws a true circular arc (`0.5523 × radius`). The corner ends up about
-7.8% of the radius off. Compensating the radius doesn't fix it — it just pushes
-the error somewhere else. When the silhouette has to match exactly, turn
-**Primitives** off and that node comes through as Bézier, identical to Figma.
+**Rectangle corners.** C4D's fillet uses handles of `0.415 × radius`, Figma draws
+a true circular arc (`0.5523 × radius`), so the corner lands about 7.8% of the
+radius off. Turn **Primitives** off when the silhouette has to match exactly.
 
-**Stretched stars and polygons.** Figma stretches those shapes to fill their
-bounding box, but C4D's Star and n-Side have a single radius. The object arrives
-regular, its radius the geometric mean of the width and height readings, and with
-scale 1 on all three axes.
+**Stretched stars and polygons.** Figma stretches them to fill the bounding box;
+C4D's Star and n-Side have a single radius. They arrive regular, with scale 1.
 
 ---
 
 ## Development
 
-`fig2c4d_core.py` (parser + spline building) is reloaded on every send. Edit it,
-copy it over, and the next click in Figma already uses the new version — **no
-Cinema 4D restart**:
+`fig2c4d_core.py` (parser + spline building) is reloaded on every send — copy it
+over and the next click already uses it, no C4D restart. On a syntax error C4D
+keeps the previous version and prints the traceback.
 
 ```bash
 cp C4D-Plugin/Fig2C4D/fig2c4d_core.py ~/Library/Preferences/Maxon/*/plugins/Fig2C4D/
 ```
 
-If the file has a syntax error, C4D keeps the previous version and prints the
-traceback to the console — the plugin doesn't die mid-session.
-
-`fig2c4d.pyp` is the exception: it holds the socket, so changing it does require a
-restart. That's why it contains nothing but the server.
-
-If a shape arrives rotated, the `SPIN` dictionary at the top of
-`fig2c4d_core.py` adjusts each primitive's orientation, in degrees.
-
-### Tests
+`fig2c4d.pyp` holds the socket, so changing it does need a restart. If a shape
+arrives rotated, the `SPIN` dict at the top of the core fixes each primitive's
+orientation in degrees.
 
 ```bash
 node Figma/test.js && python3 C4D-Plugin/Fig2C4D/fig2c4d_core.py
 ```
 
-The first covers path conversion, the primitive detectors and colours; the second
-covers the SVG parser and the tangents. Neither needs Figma or C4D running.
+Tests cover path conversion, the primitive detectors, colours, the SVG parser and
+the tangents. Neither needs Figma or C4D running.
 
 ---
 
