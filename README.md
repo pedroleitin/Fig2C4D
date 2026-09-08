@@ -34,22 +34,37 @@ C4D-Plugin/Fig2C4D/       Cinema 4D plugin: receives it and builds the splines
 
 ### 1. Cinema 4D
 
-Copy the **`Fig2C4D` folder that lives inside `C4D-Plugin/`** into C4D's plugins
-folder — not `C4D-Plugin` itself.
+You install the **`Fig2C4D` folder from inside `C4D-Plugin/`** — not `C4D-Plugin`
+itself.
 
-**macOS**
+**macOS.** Each C4D install has its own preferences folder, with a hash in the
+name, so let C4D point you at the right one:
+
+1. In Cinema 4D: `Edit → Preferences…`, then click **Open Preferences Folder** at
+   the bottom left. Finder opens on the correct folder for your version.
+2. Go into `plugins/` (create it if it isn't there).
+3. Drag `C4D-Plugin/Fig2C4D` into it.
+
+Prefer the terminal? List the preference folders you have:
 
 ```bash
-for d in ~/Library/Preferences/Maxon/*/plugins; do mkdir -p "$d/Fig2C4D" && cp C4D-Plugin/Fig2C4D/* "$d/Fig2C4D/"; done
+ls -d ~/Library/Preferences/Maxon/*/plugins
 ```
 
-**Windows** — copy `C4D-Plugin\Fig2C4D` into:
+Then copy into the one you use — this works both for installing and for updating:
+
+```bash
+DEST="$HOME/Library/Preferences/Maxon/Maxon Cinema 4D 2026_XXXXXXXX/plugins/Fig2C4D"
+mkdir -p "$DEST" && cp C4D-Plugin/Fig2C4D/* "$DEST/"
+```
+
+**Windows.** Drop `C4D-Plugin\Fig2C4D` into:
 
 ```
 %APPDATA%\Maxon\<your C4D version>\plugins\
 ```
 
-You should end up with:
+Either way, you should end up with:
 
 ```
 plugins/
@@ -65,7 +80,8 @@ and look for:
 Fig2C4D: listening on http://localhost:8787
 ```
 
-If it isn't there, the two files are most likely not in the same folder.
+Nothing there? The two files are probably not in the same folder, or they landed
+in the preferences folder of a version you're not running.
 
 ### 2. Figma
 
