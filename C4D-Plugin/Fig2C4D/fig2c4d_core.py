@@ -25,6 +25,10 @@ except ImportError:  # running outside Cinema 4D, just for the self-check
 # +Y, and positive banking turns clockwise seen from the front — hence -90. If a
 # shape still arrives rotated, just edit here: the core reloads without a restart.
 OFFSET = 0.1   # Extrude depth, in C4D units
+# Z step between stacked objects, in C4D units. Items arrive back-to-front and the
+# Front view looks along +Z, so the step is negative: the topmost Figma layer ends
+# up closest to the camera. Flip the sign to reverse the stack.
+STACK = -0.1
 
 SPIN = {"rect": 0.0, "circle": 0.0, "star": -90.0, "ngon": -90.0}
 
@@ -95,7 +99,8 @@ def parse_svg(svg):
     box = [float(x) for x in vb.group(1).split()] if vb else [0.0, 0.0, 0.0, 0.0]
     gn = re.search(r'<svg[^>]*\bdata-name="([^"]*)"', svg)
     meta = {"name": unesc(gn.group(1)) if gn else "",
-            "extrude": bool(re.search(r'<svg[^>]*\bdata-extrude="1"', svg))}
+            "extrude": bool(re.search(r'<svg[^>]*\bdata-extrude="1"', svg)),
+            "stack": bool(re.search(r'<svg[^>]*\bdata-stack="1"', svg))}
     items = []
     for raw in EL.findall(svg):
         at = dict(ATTR.findall(raw))
@@ -277,9 +282,10 @@ def build(svg):
     for i, it in enumerate(items):
         maker = MAKERS.get(it["kind"])
         sp = maker(it) if maker else None
+        z = i * STACK if meta["stack"] else 0.0
         if sp is not None:
             dress(sp, it, "%s.%03d" % (it["kind"], i))
-            sp.SetAbsPos(c4d.Vector(it["cx"] - cx, -(it["cy"] - cy), 0.0))
+            sp.SetAbsPos(c4d.Vector(it["cx"] - cx, -(it["cy"] - cy), z))
             # Figma measures the angle with Y down (positive = clockwise on screen)
             # and C4D banking also turns clockwise, so the two simply add up.
             ang = math.radians(SPIN.get(it["kind"], 0.0) + it["rot"])
@@ -298,7 +304,7 @@ def build(svg):
                 dress(sp, it, base)
                 if len(it["paths"]) > 1:
                     sp.SetName("%s.%d" % (sp.GetName(), j))
-                sp.SetAbsPos(c4d.Vector(-cx, cy, 0.0))
+                sp.SetAbsPos(c4d.Vector(-cx, cy, z))
                 set_interp(sp)
                 sp.InsertUnder(host(root, it, meta, sp))
                 made += 1
@@ -349,7 +355,10 @@ if __name__ == "__main__":
     # the group name comes from the <svg> itself
     _, _, m = parse_svg('<svg viewBox="0 0 1 1" data-name="Meu &amp; grupo" data-extrude="1">'
                         '<path d="M0 0 L1 1"/></svg>')
-    assert m == {"name": "Meu & grupo", "extrude": True}, m
+    assert m == {"name": "Meu & grupo", "extrude": True, "stack": False}, m
     _, _, m = parse_svg('<svg viewBox="0 0 1 1"><path d="M0 0 L1 1"/></svg>')
-    assert m == {"name": "", "extrude": False}, m
+    assert m == {"name": "", "extrude": False, "stack": False}, m
+
+    _, _, m = parse_svg('<svg viewBox="0 0 1 1" data-stack="1"><path d="M0 0 L1 1"/></svg>')
+    assert m["stack"] is True
     print("ok")

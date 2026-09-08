@@ -186,23 +186,27 @@ function paintAttrs(st) {
     (st.stroke ? ' stroke="' + st.stroke + '" stroke-width="' + f3(st.sw) + '"' : ' stroke="none"');
 }
 
+// Leaf nodes in Figma stacking order: children[0] is the bottom-most layer, so
+// walking children in order yields back-to-front — which is the order C4D uses to
+// space the objects along Z.
+var SOLID = { BOOLEAN_OPERATION: 1, VECTOR: 1 };
+
+function leaves(node, acc) {
+  if (node.visible === false) return acc;
+  if ("children" in node && !SOLID[node.type] && node.children.length) {
+    for (var i = 0; i < node.children.length; i++) leaves(node.children[i], acc);
+  } else if (node.absoluteBoundingBox) acc.push(node);
+  return acc;
+}
+
 if (typeof module !== "undefined")
   module.exports = { toAbsCubic: toAbsCubic, paramOf: paramOf, attrs: attrs,
-                     ngonBox: ngonBox, styleOf: styleOf, paint: paint, paintAttrs: paintAttrs };
+                     ngonBox: ngonBox, styleOf: styleOf, paint: paint,
+                     paintAttrs: paintAttrs, leaves: leaves };
 
 // --------------------------------------------------------------------------
 
 if (typeof figma !== "undefined") (function () {
-  var SOLID = { BOOLEAN_OPERATION: 1, VECTOR: 1 };
-
-  function leaves(node, acc) {
-    if (node.visible === false) return acc;
-    if ("children" in node && !SOLID[node.type] && node.children.length) {
-      for (var i = 0; i < node.children.length; i++) leaves(node.children[i], acc);
-    } else if (node.absoluteBoundingBox) acc.push(node);
-    return acc;
-  }
-
   function selected() {
     var sel = figma.currentPage.selection, acc = [];
     for (var i = 0; i < sel.length; i++) leaves(sel[i], acc);
@@ -221,7 +225,7 @@ if (typeof figma !== "undefined") (function () {
     return r;
   }
 
-  function build(nodes, param, group, extrude) {
+  function build(nodes, param, group, extrude, stack) {
     var els = [], box = null;
     for (var j = 0; j < nodes.length; j++) {
       var n = nodes[j];
@@ -248,7 +252,8 @@ if (typeof figma !== "undefined") (function () {
       svg: '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h +
         '" viewBox="' + f3(box.x) + " " + f3(box.y) + " " + w + " " + h + '"' +
         (group ? ' data-name="' + esc(group) + '"' : "") +
-        (extrude ? ' data-extrude="1"' : "") + ">\n" +
+        (extrude ? ' data-extrude="1"' : "") +
+        (stack ? ' data-stack="1"' : "") + ">\n" +
         els.join("\n") + "\n</svg>\n"
     };
   }
@@ -258,21 +263,24 @@ if (typeof figma !== "undefined") (function () {
     figma.ui.postMessage({ type: "sel", n: selected().length, name: sel.length === 1 ? sel[0].name : "" });
   }
 
-  figma.showUI(__html__, { width: 300, height: 220, themeColors: true });
+  figma.showUI(__html__, { width: 300, height: 243, themeColors: true });
   figma.on("selectionchange", sync);
   sync();
-  Promise.all([figma.clientStorage.getAsync("param"), figma.clientStorage.getAsync("extrude")])
+  Promise.all(["param", "extrude", "stack"].map(function (k) { return figma.clientStorage.getAsync(k); }))
     .then(function (v) {
-      figma.ui.postMessage({ type: "opt", param: v[0] !== false, extrude: v[1] === true });
+      figma.ui.postMessage({ type: "opt", param: v[0] !== false,
+                             extrude: v[1] === true, stack: v[2] !== false });
     });
 
   figma.ui.onmessage = function (msg) {
     if (msg.type !== "send") return;
     figma.clientStorage.setAsync("param", msg.param !== false);
     figma.clientStorage.setAsync("extrude", !!msg.extrude);
+    figma.clientStorage.setAsync("stack", msg.stack !== false);
     // the name is only an override: left alone, C4D names the group by count
     var typed = (msg.name || "").trim();
-    var out = build(selected(), msg.param !== false, msg.auto ? "" : typed, !!msg.extrude);
+    var out = build(selected(), msg.param !== false, msg.auto ? "" : typed,
+                    !!msg.extrude, msg.stack !== false);
     if (!out) { figma.notify("Nothing exportable in the selection."); return sync(); }
     figma.ui.postMessage({
       type: "file",

@@ -1,6 +1,6 @@
 # Fig2C4D
 
-![version](https://img.shields.io/badge/version-1.2-blue)
+![version](https://img.shields.io/badge/version-1.3-blue)
 ![Cinema 4D](https://img.shields.io/badge/Cinema%204D-2026-orange)
 
 Send Figma vectors straight into Cinema 4D with one click — no exporting, saving
@@ -112,6 +112,7 @@ origin, with undo working. The panel's footer shows the connection state.
 |---|---|
 | **Primitives** | Shapes with a C4D equivalent arrive as editable parametric objects instead of point splines. |
 | **Extrude fills** | Every node that has a fill goes inside an Extrude with Direction Z and Offset 0.1. |
+| **Stack in Z** | Keeps Figma's layer order, spacing objects 0.1 apart along Z. Off, everything sits at Z 0. |
 
 The text field suggests the selected layer's name and doubles as an override for
 the group name in C4D. Enter sends too.

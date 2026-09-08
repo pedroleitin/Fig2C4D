@@ -115,3 +115,36 @@ var clash = declared.filter(function (v) { return WINDOW_PROPS.indexOf(v) >= 0; 
 assert.deepStrictEqual(clash, [], "ui.html declares a global clashing with window: " + clash);
 assert.ok(declared.length > 3, "the ui.html variable scan found nothing — broken regex?");
 console.log("ok");
+
+// --- stacking order: back to front ---
+var leaves = api.leaves;
+var box = { x: 0, y: 0, width: 1, height: 1 };
+var leaf = function (n) { return { name: n, type: "RECTANGLE", absoluteBoundingBox: box }; };
+var grp = function (n, kids) { return { name: n, type: "GROUP", children: kids }; };
+
+// children[0] is the bottom-most layer in Figma, so the walk yields back to front
+assert.deepStrictEqual(
+  leaves(grp("g", [leaf("bottom"), leaf("middle"), leaf("top")]), []).map(function (n) { return n.name; }),
+  ["bottom", "middle", "top"]);
+
+// nested groups keep the same order, flattened
+assert.deepStrictEqual(
+  leaves(grp("root", [leaf("a"), grp("g", [leaf("b"), leaf("c")]), leaf("d")]), [])
+    .map(function (n) { return n.name; }),
+  ["a", "b", "c", "d"]);
+
+// hidden nodes and whole hidden groups drop out, order of the rest intact
+assert.deepStrictEqual(
+  leaves(grp("root", [leaf("a"),
+                      Object.assign(leaf("hidden"), { visible: false }),
+                      Object.assign(grp("gone", [leaf("x")]), { visible: false }),
+                      leaf("b")]), []).map(function (n) { return n.name; }),
+  ["a", "b"]);
+
+// a boolean op is a leaf: its children do not become separate objects
+assert.deepStrictEqual(
+  leaves(Object.assign(grp("bool", [leaf("x"), leaf("y")]),
+                       { type: "BOOLEAN_OPERATION", absoluteBoundingBox: box }), [])
+    .map(function (n) { return n.name; }),
+  ["bool"]);
+console.log("ok");
