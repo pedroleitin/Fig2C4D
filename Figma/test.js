@@ -26,7 +26,8 @@ assert.deepStrictEqual([q.c4d, q.w, q.h, q.r, q.cx, q.cy], ["rect", 100, 60, 8, 
 assert.strictEqual(paramOf(R({ cornerRadius: 0 })).r, 0);          // no rounding, still parametric
 assert.strictEqual(paramOf(R({ cornerRadius: 999 })).r, 30);       // raio limitado a metade do lado
 assert.strictEqual(paramOf(R({ cornerRadius: Symbol("mixed") })), null);
-assert.strictEqual(paramOf(R({ cornerRadius: 8, cornerSmoothing: 0.6 })), null);
+// corner smoothing (iOS squircle) is ignored: still a Rectangle with the nominal radius
+assert.strictEqual(paramOf(R({ cornerRadius: 8, cornerSmoothing: 0.6 })).r, 8);
 assert.strictEqual(paramOf(R({ absoluteTransform: [[2, 0, 0], [0, 1, 0]] })), null);  // escala
 
 // circle: only when round and whole
@@ -47,7 +48,7 @@ var P = function (o) { return N(Object.assign({ type: "POLYGON", pointCount: 6, 
 q = paramOf(P());
 assert.deepStrictEqual([q.c4d, q.n, Math.round(q.r), q.round], ["ngon", 6, 100, 0]);
 assert.strictEqual(paramOf(P({ cornerRadius: 12 })).round, 12);
-assert.strictEqual(paramOf(P({ cornerRadius: 12, cornerSmoothing: 0.6 })), null);
+assert.strictEqual(paramOf(P({ cornerRadius: 12, cornerSmoothing: 0.6 })).round, 12);  // smoothing ignored
 
 // stretched (the normal case in Figma): still parametric and regular, no scale
 q = paramOf(P({ height: 100 }));                      // regular height would be 200

@@ -1,6 +1,6 @@
 # Fig2C4D
 
-![version](https://img.shields.io/badge/version-1.3-blue)
+![version](https://img.shields.io/badge/version-1.4-blue)
 ![Cinema 4D](https://img.shields.io/badge/Cinema%204D-2026-orange)
 
 Send Figma vectors straight into Cinema 4D with one click — no exporting, saving
@@ -130,12 +130,14 @@ so the Object Manager icon is tinted too.
 
 | Figma | Cinema 4D | Falls back to Bézier when |
 |---|---|---|
-| Rectangle | Rectangle spline (Rounding + Radius) | corners differ from each other, or corner smoothing is on |
+| Rectangle | Rectangle spline (Rounding + Radius) | corners differ from each other |
 | Ellipse | Circle spline (Radius) | not round, or it's an arc/donut |
 | Star | Star spline (Points, Inner/Outer Radius) | — |
-| Polygon | n-Side spline (Sides, Radius, Rounding) | corner smoothing is on |
+| Polygon | n-Side spline (Sides, Radius, Rounding) | — |
 
-Any node with scale or skew in its matrix also falls back to Bézier. The
+Any node with scale or skew in its matrix also falls back to Bézier. Figma's
+*corner smoothing* (the iOS squircle) is ignored: corners always arrive as true
+circular arcs with the nominal radius. The
 primitive's descriptor travels in `data-*` attributes **alongside the exact
 path**, so if your C4D version doesn't expose one of the parameters, the shape
 falls back to Bézier rather than arriving deformed — and the console says which

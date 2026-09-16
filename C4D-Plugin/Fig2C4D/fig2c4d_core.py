@@ -24,6 +24,9 @@ except ImportError:  # running outside Cinema 4D, just for the self-check
 # and Star are born with their first vertex at +X while Figma draws the point at
 # +Y, and positive banking turns clockwise seen from the front — hence -90. If a
 # shape still arrives rotated, just edit here: the core reloads without a restart.
+VERSION = "1.4"
+DEBUG = False  # prints each incoming path to the console; flip off when done
+
 OFFSET = 0.1   # Extrude depth, in C4D units
 # Z step between stacked objects, in C4D units. Items arrive back-to-front and the
 # Front view looks along +Z, so the step is negative: the topmost Figma layer ends
@@ -104,6 +107,8 @@ def parse_svg(svg):
     items = []
     for raw in EL.findall(svg):
         at = dict(ATTR.findall(raw))
+        if DEBUG:
+            print("Fig2C4D path %s: %s" % (at.get("data-name", "?"), at.get("d", "")[:600]))
         paths = parse_d(at.get("d", ""))
         if not paths:
             continue
@@ -243,14 +248,25 @@ def wrap_extrude():
     return ex
 
 
+def centre(pts):
+    """Centre of the anchor points' bounding box, in SVG space. Tangents are
+    relative, so shifting the anchors by this puts the object axis mid-shape."""
+    xs = [p[0][0] for p in pts]
+    ys = [p[0][1] for p in pts]
+    return (min(xs) + max(xs)) / 2.0, (min(ys) + max(ys)) / 2.0
+
+
 def make_path(pts, closed):
+    """Bezier spline with its axis at the shape's centre. Returns (spline, centre)
+    so the caller can place the object where the shape was."""
+    mx, my = centre(pts)
     sp = c4d.SplineObject(len(pts), c4d.SPLINETYPE_BEZIER)
     sp[c4d.SPLINEOBJECT_CLOSED] = closed
     for j, (p, vl, vr) in enumerate(pts):
-        sp.SetPoint(j, c4d.Vector(p[0], -p[1], 0.0))
+        sp.SetPoint(j, c4d.Vector(p[0] - mx, -(p[1] - my), 0.0))
         sp.SetTangent(j, c4d.Vector(vl[0], -vl[1], 0.0), c4d.Vector(vr[0], -vr[1], 0.0))
     sp.Message(c4d.MSG_UPDATE)
-    return sp
+    return sp, (mx, my)
 
 
 def host(root, it, meta, sp):
@@ -259,6 +275,8 @@ def host(root, it, meta, sp):
         return root
     ex = wrap_extrude()
     if ex is None:
+        print("Fig2C4D: c4d.Oextrude not found in this version, '%s' left as a spline"
+              % sp.GetName())
         return root
     dress(ex, it, sp.GetName())   # same name, same Display Color, same icon
     ex.InsertUnder(root)
@@ -299,12 +317,12 @@ def build(svg):
                 print("Fig2C4D: '%s' fell back to Bézier, missing from c4d: %s"
                       % (it["kind"], ", ".join(missing(it["kind"])) or "(unknown parameter)"))
             for j, (pts, closed) in enumerate(it["paths"]):
-                sp = make_path(pts, closed)
+                sp, (mx, my) = make_path(pts, closed)
                 base = it["name"] or "path.%03d" % i
                 dress(sp, it, base)
                 if len(it["paths"]) > 1:
                     sp.SetName("%s.%d" % (sp.GetName(), j))
-                sp.SetAbsPos(c4d.Vector(-cx, cy, z))
+                sp.SetAbsPos(c4d.Vector(mx - cx, -(my - cy), z))
                 set_interp(sp)
                 sp.InsertUnder(host(root, it, meta, sp))
                 made += 1
@@ -312,6 +330,12 @@ def build(svg):
                  "Fig2C4D - %d %s" % (made, "item" if made == 1 else "items"))
     doc.EndUndo()
     c4d.EventAdd()
+    # One line per send in the console, so a "nothing happened" report can be
+    # checked against what was actually requested and built.
+    filled = sum(1 for it in items if it["fill"])
+    print("Fig2C4D: %d spline(s), %d with fill | extrude=%s stack=%s | core %s"
+          % (made, filled, "on" if meta["extrude"] else "off",
+             "on" if meta["stack"] else "off", VERSION))
     c4d.StatusSetText("Fig2C4D: %d spline(s)" % made)
     return made
 
@@ -351,6 +375,11 @@ if __name__ == "__main__":
                          ' data-fill="#ff0000" data-stroke="#0080ff"/>')
     assert items[0]["name"] == "Bot&o <ok>", items[0]["name"]
     assert (items[0]["fill"], items[0]["stroke"]) == ("#ff0000", "#0080ff")
+
+    # axis lands mid-shape: the anchors' bbox centre, tangents untouched
+    pts = [((10.0, 20.0), (0, 0), (1, 1)), ((30.0, 60.0), (2, 2), (0, 0)), ((20.0, 40.0), (0, 0), (0, 0))]
+    assert centre(pts) == (20.0, 40.0)
+    assert centre([((5.0, 5.0), (0, 0), (0, 0))]) == (5.0, 5.0)
 
     # the group name comes from the <svg> itself
     _, _, m = parse_svg('<svg viewBox="0 0 1 1" data-name="Meu &amp; grupo" data-extrude="1">'

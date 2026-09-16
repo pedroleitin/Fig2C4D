@@ -72,12 +72,13 @@ function ngonBox(n, inner) {
            h: Math.max.apply(null, ys) - Math.min.apply(null, ys) };
 }
 
-// Uniform corner radius; 0 when there is none, -1 when no primitive will do.
+// Uniform corner radius; 0 when there is none, -1 when corners differ from each
+// other (figma.mixed). Corner smoothing is ignored on purpose: the iOS squircle
+// never travels to C4D, the nominal radius does.
 function radius(node) {
   var r = node.cornerRadius;
-  if (typeof r !== "number") return -1;   // figma.mixed = corners differ
-  if (r <= 0) return 0;
-  return node.cornerSmoothing ? -1 : r;   // a squircle is not a circular arc
+  if (typeof r !== "number") return -1;
+  return r > 0 ? r : 0;
 }
 
 // Figma stretches polygons/stars to fill the bbox, but C4D's n-Side and Star have
@@ -213,13 +214,16 @@ if (typeof figma !== "undefined") (function () {
     return acc;
   }
 
-  // Non-vector nodes (rect, ellipse, text, boolean) become vectors via flatten on
-  // a throwaway clone — Figma resolves the corners into Bézier for us.
+  // Every node goes through flatten on a throwaway clone, parented to the page at
+  // the node's absolute transform (instances refuse new children, the page never
+  // does). Corner smoothing is zeroed on the clone first, so Figma resolves the
+  // corners into true circular arcs — never the iOS squircle.
   function pathsOf(node) {
-    if (node.type === "VECTOR") return { paths: node.vectorPaths, m: node.absoluteTransform };
-    var parent = node.parent, clone = node.clone();
-    parent.appendChild(clone);
-    var v = figma.flatten([clone], parent);
+    var page = figma.currentPage, clone = node.clone();
+    page.appendChild(clone);
+    clone.relativeTransform = node.absoluteTransform;
+    try { clone.cornerSmoothing = 0; } catch (e) {}
+    var v = figma.flatten([clone], page);
     var r = { paths: v.vectorPaths.map(function (p) { return { data: p.data }; }), m: v.absoluteTransform };
     v.remove();
     return r;
