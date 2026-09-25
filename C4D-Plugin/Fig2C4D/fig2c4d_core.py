@@ -35,6 +35,11 @@ STACK = -0.1
 
 SPIN = {"rect": 0.0, "circle": 0.0, "star": -90.0, "ngon": -90.0}
 
+# C4D draws a Bézier with handles 4/3 longer than the stored tangent, so an SVG
+# control offset goes in scaled by 3/4 — C4D's own SVG importer does the same.
+# Measured on 2026.3.1. If corners arrive too round on another version, set 1.0.
+HANDLE = 0.75
+
 TOK = re.compile(r"([MLCZ])([^MLCZ]*)", re.I)
 NUM = re.compile(r"-?\d*\.?\d+(?:e[-+]?\d+)?", re.I)
 EL = re.compile(r"<path\b([^>]*)>", re.I)
@@ -264,7 +269,8 @@ def make_path(pts, closed):
     sp[c4d.SPLINEOBJECT_CLOSED] = closed
     for j, (p, vl, vr) in enumerate(pts):
         sp.SetPoint(j, c4d.Vector(p[0] - mx, -(p[1] - my), 0.0))
-        sp.SetTangent(j, c4d.Vector(vl[0], -vl[1], 0.0), c4d.Vector(vr[0], -vr[1], 0.0))
+        sp.SetTangent(j, c4d.Vector(vl[0], -vl[1], 0.0) * HANDLE,
+                      c4d.Vector(vr[0], -vr[1], 0.0) * HANDLE)
     sp.Message(c4d.MSG_UPDATE)
     return sp, (mx, my)
 
